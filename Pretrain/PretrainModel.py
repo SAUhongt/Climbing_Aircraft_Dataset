@@ -1,134 +1,162 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torch_geometric.nn import GCNConv  # 从PyTorch几何库中导入图卷积网络层（GCNConv）
 
-class GCNLayer(nn.Module):
-    def __init__(self, in_features: int, out_features: int):
-        super(GCNLayer, self).__init__()
-        self.linear = nn.Linear(in_features, out_features)
 
-    def forward(self, edge_features: torch.Tensor, edge_weights: torch.Tensor):
-        """
-        :param edge_features: 形状为 (b, n, n, f)
-        :param edge_weights: 形状为 (b, n, n, 1)
-        :return: 输出特征，形状为 (b, n, out_features)
-        """
-        b, n, _, _ = edge_weights.shape
+class GCN(torch.nn.Module):  # 定义一个GNN类，继承自PyTorch的Module类
+    def __init__(self, input_dim, hidden_dim, output_dim, dropout):  # 定义GNN类的初始化函数
+        super().__init__()  # 调用父类（Module类）的初始化函数
+        # 创建第一个图卷积层，输入特征维度为数据集节点特征维度，输出特征维度为16
+        self.conv1 = GCNConv(input_dim, hidden_dim)
+        # 创建第二个图卷积层，输入特征维度为16，输出特征维度为数据集类别数量
+        self.conv2 = GCNConv(hidden_dim, output_dim)
+        self.dropout = dropout  # 定义Dropout层，用于防止过拟合
 
-        # 扩展 edge_weights
-        adj = edge_weights.expand(-1, -1, -1, edge_features.size(-1))  # 变为 (b, n, n, f)
+    def forward(self, edge_features, edge_weights):  # 定义前向传播函数，接受一个数据对象作为输入
+        x, edge_index = (edge_features, edge_weights)  # 从数据对象中获取节点特征和边索引
+        x = self.conv1(x, edge_index)  # 通过第一个图卷积层处理节点特征
+        x = F.relu(x)  # 对输出进行ReLU激活函数操作
+        x = F.dropout(x, self.dropout, training=self.training)  # 对输出进行Dropout操作，用于防止过拟合
+        x = self.conv2(x, edge_index)  # 通过第二个图卷积层处理节点特征
+        return F.relu(x)  # 对输出进行LogSoftmax操作，得到预测结果
 
-        # 进行加权聚合
-        aggregated_features = torch.matmul(adj, edge_features)  # (b, n, n, f) @ (b, n, n, f) -> (b, n, f)
 
-        # 通过线性层进行变换
-        output = self.linear(aggregated_features)
-        return output
-
-class normal_conv(nn.Module):
+class NormalConv(nn.Module):
     def __init__(self, dg_hidden_size):
-        super(normal_conv, self).__init__()
-        self.fc1 = nn.Linear(dg_hidden_size, 1)
-        self.fc2 = nn.Linear(dg_hidden_size * 2, dg_hidden_size)
+        super(NormalConv, self).__init__()
+        self.fc1 = nn.Linear(dg_hidden_size * 2, dg_hidden_size * 2)
+        self.fc2 = nn.Linear(dg_hidden_size, dg_hidden_size * 2)
 
     def forward(self, y, shape):
         support = self.fc1(torch.relu(self.fc2(y))).reshape(shape)
         return support
 
+
 class DynamicGraphLearner(nn.Module):
-    def __init__(self, feature_dim: int, hidden_dim: int):
+    def __init__(self, feature_dim: int, hidden_dim: int, seq_len: int):
         super(DynamicGraphLearner, self).__init__()
-        self.conv = normal_conv(hidden_dim)
+        self.conv = NormalConv(feature_dim)
         self.mlp_features = nn.Sequential(
             nn.Linear(2 * feature_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, feature_dim)  # 输出维度调整为 feature_dim
+            nn.Linear(hidden_dim, feature_dim)
         )
         self.mlp_weight = nn.Sequential(
             nn.Linear(2 * feature_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, 1)  # 输出为单一值，用于权重
+            nn.Linear(hidden_dim, seq_len)
         )
 
     def forward(self, inputs: torch.Tensor):
-        """
-        :param inputs: 形状为 (b, n, f)
-        :return: edge_features，形状为 (b, n, f)
-        :return: edge_weights，形状为 (b, n, n)
-        """
         batch_size, num_nodes, feature_dim = inputs.size()
+        conv_output = self.conv(inputs.view(-1, feature_dim), (-1, feature_dim * 2))
+        edge_features = self.mlp_features(conv_output)
+        edge_weights = torch.sigmoid(self.mlp_weight(conv_output))
 
-        # 使用 self.conv 生成特征
-        conv_output = self.conv(inputs)  # (b, n, f)
-
-        # 计算边特征
-        edge_features = self.mlp_features(conv_output.unsqueeze(2).expand(-1, -1, num_nodes, -1).view(-1, 2 * feature_dim))  # (b * n * n, f)
-
-        # 计算边权重
-        edge_weights = torch.sigmoid(self.mlp_weight(conv_output.unsqueeze(2).expand(-1, -1, num_nodes, -1).view(-1, 2 * feature_dim)))  # (b * n * n)
-
-        # 将输出形状调整为 (b, n, f) 和 (b, n, n)
-        edge_features = edge_features.view(batch_size, num_nodes, num_nodes, feature_dim)  # (b, n, n, f)
-        edge_weights = edge_weights.view(batch_size, num_nodes, num_nodes)  # (b, n, n)
+        edge_features = edge_features.view(batch_size, num_nodes, feature_dim)
+        edge_weights = edge_weights.view(batch_size, num_nodes, num_nodes)
 
         return edge_features, edge_weights
 
 
+class PatchEmbedding(nn.Module):
+    def __init__(self, input_dim, embed_dim, patch_size):
+        super(PatchEmbedding, self).__init__()
+        self.patch_size = patch_size
+        self.linear = nn.Linear(patch_size * input_dim, embed_dim)  # 修改为适应展平后的输入
+
+    def forward(self, x):
+        batch_size, seq_length, input_dim = x.size()
+        num_patches = seq_length // self.patch_size
+        x = x.view(batch_size, num_patches, self.patch_size * input_dim)  # (batch_size, num_patches, patch_size * input_dim)
+        return self.linear(x)  # (batch_size, num_patches, embed_dim)
+
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, embed_dim, max_len=100):
+        super(PositionalEncoding, self).__init__()
+        self.encoding = self._generate_positional_encoding(embed_dim, max_len)
+
+    def _generate_positional_encoding(self, embed_dim, max_len):
+        pos = torch.arange(max_len, dtype=torch.float).unsqueeze(1)
+        idx = torch.arange(embed_dim, dtype=torch.float).unsqueeze(0)  # 这里修复了idx的定义
+        encoding = pos / 10000**(idx / embed_dim)  # Shape: (max_len, embed_dim)
+        encoding[:, 0::2] = torch.sin(encoding[:, 0::2])
+        encoding[:, 1::2] = torch.cos(encoding[:, 1::2])
+        return encoding.unsqueeze(0)  # Add batch dimension
+
+    def forward(self, x):
+        # x: (batch_size, seq_length, embed_dim)
+        return x + self.encoding[:, :x.size(1)]  # Broadcast positional encoding
+
 
 
 class PretrainModel(nn.Module):
-    def __init__(self, feature_dim, hidden_dim, num_layers):
+    def __init__(self, feature_dim, seq_len, hidden_dim, num_layers, dropout, patch_size):
         super(PretrainModel, self).__init__()
-        self.embedding = nn.Linear(feature_dim, hidden_dim)
+        self.patch_embedding = PatchEmbedding(feature_dim, hidden_dim, patch_size)
+        self.positional_encoding = PositionalEncoding(hidden_dim, seq_len)
         self.transformer_encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(hidden_dim, nhead=8), num_layers=num_layers
+            nn.TransformerEncoderLayer(hidden_dim, nhead=8, batch_first=True), num_layers=num_layers
         )
-        self.dynamic_graph = DynamicGraphLearner(hidden_dim, hidden_dim * 2)  # GNN模块
-        self.gcn_layer = GCNLayer(hidden_dim, hidden_dim)  # GCN层
+        self.dynamic_graph = DynamicGraphLearner(hidden_dim, hidden_dim * 2, seq_len//patch_size)
+        self.gcn = GCN(hidden_dim * 2, hidden_dim * 2, hidden_dim, dropout)  # 使用新的 GCN
         self.transformer_decoder = nn.TransformerDecoder(
-            nn.TransformerDecoderLayer(hidden_dim, nhead=8), num_layers=num_layers
+            nn.TransformerDecoderLayer(hidden_dim, nhead=8, batch_first=True), num_layers=num_layers
         )
         self.output_layer = nn.Linear(hidden_dim, feature_dim)
 
     def forward(self, x, mask=None, is_pretraining=True):
-        # 输入形状为 (batch, sequence_length, feature_dim)
-        batch_size, seq_length, _ = x.size()
-        x = self.embedding(x)  # 输入特征嵌入
-
-        # 修改 mask 的维度
-        if mask is not None:
-            mask = mask.view(-1)  # 确保 mask 是 1-D
+        batch_size, seq_length, feature_dim = x.size()
+        x = self.patch_embedding(x)
+        x = self.positional_encoding(x)
 
         # 使用 Transformer 编码器
-        encoder_output = self.transformer_encoder(x.view(-1, x.size(2)), src_key_padding_mask=mask)  # 编码器输出
+        encoder_output = self.transformer_encoder(x, src_key_padding_mask=mask.view(batch_size, -1) if mask is not None else None)
 
         # 将编码器输出传入 DynamicGraphModule
-        edge_features, edge_weights = self.dynamic_graph(encoder_output.view(batch_size, seq_length, -1))
+        edge_features, edge_weights = self.dynamic_graph(encoder_output)
 
         # 使用 GCN 进行卷积
-        gcn_output = self.gcn_layer(edge_features, edge_weights)
+        gcn_output = self.gcn(edge_weights, edge_features)  # 调整输入格式
 
         # 将 GCN 输出与编码器输出相加
-        combined_output = encoder_output.view(batch_size, seq_length, -1) + gcn_output  # 结合编码器输出和 GCN 输出
+        combined_output = encoder_output + gcn_output.view(batch_size, seq_len, -1)  # 调整输出格式
 
         if is_pretraining:
+            tgt_key_padding_mask = mask.view(-1) if mask is not None else None
+
             # 使用解码器进行自回归填充
-            decoder_output = self.transformer_decoder(combined_output.unsqueeze(0), combined_output.unsqueeze(0), tgt_key_padding_mask=mask.view(1, batch_size * seq_length))
-            return self.output_layer(decoder_output)  # 输出层
+            decoder_output = self.transformer_decoder(
+                combined_output,
+                combined_output,
+                tgt_key_padding_mask=tgt_key_padding_mask
+            )
+            return self.output_layer(decoder_output)
         else:
-            return encoder_output.view(batch_size, seq_length, -1) + gcn_output  # 下游任务输出
+            return encoder_output + gcn_output.view(batch_size, seq_len, -1)
 
 
-# 示例：创建模型
+# 示例参数
 feature_dim = 10  # 输入特征维度
-hidden_dim = 64  # 隐藏层维度
-num_layers = 4  # Transformer层数
-model = PretrainModel(feature_dim, hidden_dim, num_layers)
+hidden_dim = 64   # 隐藏层维度
+num_layers = 4    # Transformer层数
+seq_len = 60
+patch_size = 5    # 根据需要设置
+dropout = 0.5     # dropout比例
+
+# 创建模型
+model = PretrainModel(feature_dim, seq_len, hidden_dim, num_layers, dropout, patch_size)
+
 
 # 示例输入
 input_data = torch.rand(32, 60, feature_dim)  # (batch size, sequence length, 特征维度)
-mask = torch.zeros(32, 60, dtype=torch.bool)  # (batch size, sequence_length)
+mask = torch.zeros(32, 60 // patch_size, dtype=torch.bool)  # (batch size, num_patches)
 
 # 前向传播
 output = model(input_data, mask, is_pretraining=True)
