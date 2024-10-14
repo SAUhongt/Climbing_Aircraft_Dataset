@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torch_geometric.nn import GCNConv  # 从PyTorch几何库中导入图卷积网络层（GCNConv）
+from torch_geometric.nn import GCNConv
 from torch_geometric.utils import dense_to_sparse, to_dense_batch, to_dense_adj
 from torch_geometric.data import Data, Batch
 
@@ -185,7 +185,7 @@ feature_dim = 10  # 输入特征维度
 hidden_dim = 64  # 隐藏层维度
 num_layers = 4  # Transformer层数
 seq_len = 60
-patch_size = 5  # 根据需要设置
+patch_size = 1  # 根据需要设置
 dropout = 0.5  # dropout比例
 
 # 创建模型
