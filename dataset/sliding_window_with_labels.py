@@ -93,8 +93,8 @@ def process_and_save(file_path, output_path, window_size=80, input_size=60, labe
 # output_file_path = 'E:\\climbing-aircraft-dataset\\downstream_data\\normalized_test_with_labels.pt'  # 指定保存的文件名
 # input_file_path = 'E:\\climbing-aircraft-dataset\\downstream_data\\normalized_valid.csv'  # 替换为你的CSV文件路径
 # output_file_path = 'E:\\climbing-aircraft-dataset\\downstream_data\\normalized_valid_with_labels.pt'  # 指定保存的文件名
-input_file_path = 'E:\\climbing-aircraft-dataset\\pretraining_data\\pretraining_data.csv'  # 替换为你的CSV文件路径
-output_file_path = 'E:\\climbing-aircraft-dataset\\downstream_data\\normalized_train_with_labels.pt'  # 指定保存的文件名
+input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_test.csv'  # 替换为你的CSV文件路径
+output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_test.pt'  # 指定保存的文件名
 window_size = 80
 input_size = 60
 label_size = 20

@@ -62,11 +62,28 @@ def process_and_save(file_path, output_path, window_size=60, step_size=1):
     torch.save({'features': features_tensor, 'masks': masks_tensor}, output_path)
     print(f'Saved processed data to {output_path}')
 
-
-# 示例使用
-input_file_path = 'E:\\climbing-aircraft-dataset\\pretraining_data\\pretraining_data.csv'  # 替换为你的CSV文件路径
-output_file_path = 'E:\\climbing-aircraft-dataset\\pretraining_data\\pretraining_data.pt'  # 指定保存的文件名
 window_size = 60
 step_size = 5
 
+
+#调试维度用的一个小文件
+input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\normalized_diff_filtered_DH8D_train.csv'  # 替换为你的CSV文件路径
+output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\pretraining_data_train.pt'  # 指定保存的文件名
 process_and_save(input_file_path, output_file_path, window_size, step_size)
+input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\normalized_diff_filtered_DH8D_valid.csv'  # 替换为你的CSV文件路径
+output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\pretraining_data_valid.pt'  # 指定保存的文件名
+process_and_save(input_file_path, output_file_path, window_size, step_size)
+input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\normalized_diff_filtered_DH8D_test.csv'  # 替换为你的CSV文件路径
+output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\pretraining_data_test.pt'  # 指定保存的文件名
+process_and_save(input_file_path, output_file_path, window_size, step_size)
+
+
+
+
+# 示例使用
+# input_file_path = 'E:\\climbing-aircraft-dataset\\pretraining_data\\pretraining_data.csv'  # 替换为你的CSV文件路径
+# output_file_path = 'E:\\climbing-aircraft-dataset\\pretraining_data\\pretraining_data.pt'  # 指定保存的文件名
+# process_and_save(input_file_path, output_file_path, window_size, step_size)
+# input_file_path = 'E:\\climbing-aircraft-dataset\\downstream_data\\normalized_valid.csv'  # 替换为你的CSV文件路径
+# output_file_path = 'E:\\climbing-aircraft-dataset\\pretraining_data\\pretraining_data_valid.pt'  # 指定保存的文件名
+# process_and_save(input_file_path, output_file_path, window_size, step_size)
