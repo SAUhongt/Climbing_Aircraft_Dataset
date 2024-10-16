@@ -83,9 +83,10 @@ class DynamicGraphLearner(nn.Module):
 
         # Apply TCN
         tcn_output = self.tcn(inputs.transpose(1, 2)).transpose(1, 2)
+        tcn_output = tcn_output * mask.unsqueeze(-1)
 
         # 添加全局平均池化
-        global_features = torch.mean(tcn_output*mask.unsqueeze(-1), dim=1)  # 对序列长度维度进行平均池化
+        global_features = torch.mean(tcn_output, dim=1)  # 对序列长度维度进行平均池化
 
         m1 = self.mlp_weight1(global_features).view(batch_size, self.seq_len, self.seq_len)
         m2 = self.mlp_weight2(global_features).view(batch_size, self.seq_len, self.seq_len)
@@ -166,17 +167,17 @@ class PretrainModel(nn.Module):
 
         encoder_output = self.encoder(
             x, src_key_padding_mask=Tmask.view(batch_size, -1) if Tmask is not None else None
-        )
+        )* mask.unsqueeze(-1)
 
         edge_features, edge_weights = self.dynamic_graph(encoder_output, mask)
 
-        gcn_output = self.gcn(edge_features, edge_weights)
-        combined_output = encoder_output + gcn_output.view(batch_size, seq_length, -1)
+        gcn_output = self.gcn(edge_features, edge_weights)* mask.unsqueeze(-1)
+        combined_output = encoder_output + gcn_output
 
         if is_pretraining:
             decoder_output = self.decoder(
                 combined_output, src_key_padding_mask=Tmask.view(batch_size, -1) if Tmask is not None else None
-            )
+            )* mask.unsqueeze(-1)
             return self.output_layer(decoder_output.view(batch_size * seq_length, -1))
         else:
             return combined_output
