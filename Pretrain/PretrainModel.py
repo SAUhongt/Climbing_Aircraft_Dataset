@@ -6,6 +6,8 @@ from torch_geometric.data import Data, Batch
 from torch_geometric.utils import dense_to_sparse
 from torch_geometric.utils import to_dense_batch
 
+from Pretrain.TCN.tcn import TemporalConvNet
+
 
 class GCN(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, dropout, device):
@@ -41,41 +43,66 @@ class GCN(nn.Module):
         return batch
 
 
-class NormalConv(nn.Module):
-    def __init__(self, dg_hidden_size):
-        super(NormalConv, self).__init__()
-        self.fc1 = nn.Linear(dg_hidden_size * 2, dg_hidden_size * 2)
-        self.fc2 = nn.Linear(dg_hidden_size, dg_hidden_size * 2)
-
-    def forward(self, y, shape):
-        support = self.fc1(torch.relu(self.fc2(y))).reshape(shape)
-        return support
+# class NormalConv(nn.Module):
+#     def __init__(self, dg_hidden_size):
+#         super(NormalConv, self).__init__()
+#         self.fc1 = nn.Linear(dg_hidden_size * 2, dg_hidden_size * 2)
+#         self.fc2 = nn.Linear(dg_hidden_size, dg_hidden_size * 2)
+#
+#     def forward(self, y, shape):
+#         support = self.fc1(torch.relu(self.fc2(y))).reshape(shape)
+#         return support
 
 
 class DynamicGraphLearner(nn.Module):
     def __init__(self, feature_dim: int, hidden_dim: int, out_feature_dim: int, seq_len: int):
         super(DynamicGraphLearner, self).__init__()
-        self.conv = NormalConv(feature_dim)
+        self.tcn = TemporalConvNet(feature_dim, [hidden_dim], kernel_size=3)
         self.mlp_features = nn.Sequential(
-            nn.Linear(2 * feature_dim, hidden_dim),
+            nn.Linear(hidden_dim, 2 * hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, out_feature_dim)
+            nn.Linear(2 * hidden_dim, out_feature_dim)
         )
-        self.mlp_weight = nn.Sequential(
-            nn.Linear(2 * feature_dim, hidden_dim),
+        self.mlp_weight1 = nn.Sequential(
+            nn.Linear(hidden_dim, 2 * hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, seq_len),
+            nn.Linear(2 * hidden_dim, seq_len ** 2),
             nn.Tanh()
         )
+        self.mlp_weight2 = nn.Sequential(
+            nn.Linear(hidden_dim, 2 * hidden_dim),
+            nn.ReLU(),
+            nn.Linear(2 * hidden_dim, seq_len ** 2),
+            nn.Tanh()
+        )
+        self.seq_len = seq_len
 
-    def forward(self, inputs: torch.Tensor):
+    def forward(self, inputs: torch.Tensor, mask: torch.Tensor):
+        # inputs shape: (batch_size, num_nodes, feature_dim)
         batch_size, num_nodes, feature_dim = inputs.size()
-        conv_output = self.conv(inputs.view(-1, feature_dim), (-1, feature_dim * 2))
-        edge_features = self.mlp_features(conv_output)
-        edge_weights = torch.relu(self.mlp_weight(conv_output))
 
-        edge_features = edge_features.view(batch_size, num_nodes, feature_dim)
+        # Apply TCN
+        tcn_output = self.tcn(inputs.transpose(1, 2)).transpose(1, 2)
+
+        # 添加全局平均池化
+        global_features = torch.mean(tcn_output*mask.unsqueeze(-1), dim=1)  # 对序列长度维度进行平均池化
+
+        m1 = self.mlp_weight1(global_features).view(batch_size, self.seq_len, self.seq_len)
+        m2 = self.mlp_weight2(global_features).view(batch_size, self.seq_len, self.seq_len)
+
+        a = torch.tanh(torch.matmul(m1, m2.transpose(2, 1)) - torch.matmul(m2, m1.transpose(2, 1)))
+
+        # Extract edge features and weights
+        edge_features = self.mlp_features(tcn_output.reshape(batch_size * num_nodes, -1))
+        edge_weights = torch.relu(a)
+
+        # Reshape to appropriate sizes
+        edge_features = edge_features.view(batch_size, num_nodes, -1)
         edge_weights = edge_weights.view(batch_size, num_nodes, num_nodes)
+
+        # Apply mask to edge weights
+        edge_weights = edge_weights * mask.unsqueeze(-1) * mask.unsqueeze(-1).transpose(1, 2)
+        edge_features = edge_features * mask.unsqueeze(-1)
 
         return edge_features, edge_weights
 
@@ -131,23 +158,24 @@ class PretrainModel(nn.Module):
     def forward(self, x, mask=None, is_pretraining=True):
         x = x.to(self.device)
         mask = mask.to(self.device) if mask is not None else None
+        Tmask = ~mask
 
         x = self.patch_embedding(x)
         x = self.positional_encoding(x)
         batch_size, seq_length, feature_dim = x.size()
 
         encoder_output = self.encoder(
-            x, src_key_padding_mask=mask.view(batch_size, -1) if mask is not None else None
+            x, src_key_padding_mask=Tmask.view(batch_size, -1) if Tmask is not None else None
         )
 
-        edge_features, edge_weights = self.dynamic_graph(encoder_output)
+        edge_features, edge_weights = self.dynamic_graph(encoder_output, mask)
 
         gcn_output = self.gcn(edge_features, edge_weights)
         combined_output = encoder_output + gcn_output.view(batch_size, seq_length, -1)
 
         if is_pretraining:
             decoder_output = self.decoder(
-                combined_output, src_key_padding_mask=mask.view(batch_size, -1) if mask is not None else None
+                combined_output, src_key_padding_mask=Tmask.view(batch_size, -1) if Tmask is not None else None
             )
             return self.output_layer(decoder_output.view(batch_size * seq_length, -1))
         else:

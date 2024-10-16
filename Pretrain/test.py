@@ -25,11 +25,10 @@ def test(model, test_loader, device):
         with tqdm(test_loader, desc="Testing", unit="batch") as pbar:
             for sequences, valid_mask in pbar:
                 sequences, valid_mask = sequences.to(device), valid_mask.to(device)
-                Tmasks = ~valid_mask
                 masked_sequences, fea_masks = generate_mask(sequences, valid_mask, drop_prob=0.8, min_span=2,
                                                             max_span=10, max_drops=4)
 
-                outputs = model(masked_sequences, mask=Tmasks, is_pretraining=True)
+                outputs = model(masked_sequences, mask=valid_mask, is_pretraining=True)
                 loss = compute_loss(outputs, sequences, fea_masks,
                                     valid_mask.unsqueeze(-1).expand(-1, -1, sequences.size(-1)))
 

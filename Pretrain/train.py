@@ -12,6 +12,9 @@ from dataset.load_processed_data import load_processed_data
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning,
                         message="The PyTorch API of nested tensors is in prototype stage")
+warnings.filterwarnings("ignore", category=UserWarning,
+                        message="torch.nn.utils.weight_norm is deprecated in favor of"
+                                " torch.nn.utils.parametrizations.weight_norm")
 
 # 设置日志记录
 log_filename = "log/training_log_base.log"  # 使用固定的日志文件名，这样可以在重新训练时继续记录
@@ -110,12 +113,11 @@ def train_one_epoch(model, train_loader, optimizer, device):
     with tqdm(train_loader, desc="Training", unit="batch") as pbar:
         for sequences, valid_mask in pbar:
             sequences, valid_mask = sequences.to(device), valid_mask.to(device)
-            Tmasks = ~valid_mask
             masked_sequences, fea_masks = generate_mask(sequences, valid_mask, drop_prob=0.8, min_span=2, max_span=10,
                                                         max_drops=4)
 
             optimizer.zero_grad()
-            outputs = model(masked_sequences, mask=Tmasks, is_pretraining=True)
+            outputs = model(masked_sequences, mask=valid_mask, is_pretraining=True)
             loss = compute_loss(outputs, sequences, fea_masks, valid_mask.unsqueeze(-1).expand(-1, -1, sequences.size(-1)))
 
             loss.backward()
@@ -136,11 +138,10 @@ def validate(model, valid_loader, device):
         with tqdm(valid_loader, desc="Validating", unit="batch") as pbar:
             for sequences, valid_mask in pbar:
                 sequences, valid_mask = sequences.to(device), valid_mask.to(device)
-                Tmasks = ~valid_mask
                 masked_sequences, fea_masks = generate_mask(sequences, valid_mask, drop_prob=0.8, min_span=2,
                                                             max_span=10, max_drops=4)
 
-                outputs = model(masked_sequences, mask=Tmasks, is_pretraining=True)
+                outputs = model(masked_sequences, mask=valid_mask, is_pretraining=True)
                 loss = compute_loss(outputs, sequences, fea_masks,
                                     valid_mask.unsqueeze(-1).expand(-1, -1, sequences.size(-1)))
 

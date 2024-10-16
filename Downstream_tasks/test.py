@@ -32,10 +32,9 @@ def test_downstream(model, test_loader, device):
                     masks_input.to(device),
                     masks_label.to(device)
                 )
-                Tmasks = ~masks_input
 
                 # 下游任务模型进行预测，is_pretraining 设置为 False
-                outputs = model(features, mask=Tmasks)
+                outputs = model(features, mask=masks_input)
 
                 # 计算损失，仅计算有效区域的损失
                 loss = nn.MSELoss()(outputs * masks_label.unsqueeze(-1), labels * masks_label.unsqueeze(-1))

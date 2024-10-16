@@ -57,10 +57,9 @@ def train_one_epoch(model, train_loader, optimizer, device):
                 masks_input.to(device),
                 masks_label.to(device)
             )
-            Tmasks = ~masks_input
 
             optimizer.zero_grad()
-            outputs = model(features, mask=Tmasks)
+            outputs = model(features, mask=masks_input)
             loss = compute_loss(outputs, labels, masks_label.unsqueeze(-1))
 
             loss.backward()
@@ -85,9 +84,7 @@ def validate(model, valid_loader, device):
                     masks_label.to(device)
                 )
 
-                Tmasks = ~masks_input
-
-                outputs = model(features, mask=Tmasks)
+                outputs = model(features, mask=masks_input)
                 loss = compute_loss(outputs, labels, masks_label.unsqueeze(-1))
 
                 running_loss += loss.item() * features.size(0)
