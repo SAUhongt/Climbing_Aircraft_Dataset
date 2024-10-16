@@ -57,9 +57,10 @@ def train_one_epoch(model, train_loader, optimizer, device):
                 masks_input.to(device),
                 masks_label.to(device)
             )
+            Tmasks = ~masks_input
 
             optimizer.zero_grad()
-            outputs = model(features, mask=masks_input.unsqueeze(-1))
+            outputs = model(features, mask=Tmasks)
             loss = compute_loss(outputs, labels, masks_label.unsqueeze(-1))
 
             loss.backward()
@@ -84,7 +85,9 @@ def validate(model, valid_loader, device):
                     masks_label.to(device)
                 )
 
-                outputs = model(features, mask=masks_input.unsqueeze(-1))
+                Tmasks = ~masks_input
+
+                outputs = model(features, mask=Tmasks)
                 loss = compute_loss(outputs, labels, masks_label.unsqueeze(-1))
 
                 running_loss += loss.item() * features.size(0)
@@ -94,6 +97,7 @@ def validate(model, valid_loader, device):
 
 # 保存检查点
 def save_checkpoint(model, optimizer, epoch, best_valid_loss, checkpoint_path='checkpoint/downstream_checkpoint.pth'):
+    os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)  # 创建目录（如果不存在）
     torch.save({
         'epoch': epoch,
         'model_state_dict': model.state_dict(),

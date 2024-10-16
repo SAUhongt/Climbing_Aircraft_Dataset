@@ -20,7 +20,7 @@ class DownstreamModel(nn.Module):
         # 输出层，将 LSTM 的输出映射到原始特征维度
         self.output_layer = nn.Linear(hidden_dim, feature_dim)
 
-    def forward(self, x, mask=None):
+    def forward(self, x, mask=None, output_length=20):
         # 使用预训练模型生成的上下文表示
         combined_output = self.pretrain_model(x, mask, is_pretraining=False)
 
@@ -28,8 +28,14 @@ class DownstreamModel(nn.Module):
         # 使用 LSTM 进行进一步的序列建模
         lstm_output, _ = self.lstm(combined_output)
 
-        # 使用全连接层将 LSTM 的输出映射到 feature_dim 大小
-        output = self.output_layer(lstm_output)
+        # 根据 output_length 确定输出的长度
+        if output_length is not None:
+            # 使用切片选择输出的长度
+            output = self.output_layer(lstm_output[:, :output_length, :])
+        else:
+            # 如果未指定输出长度，则使用整个输出
+            output = self.output_layer(lstm_output)
 
-        # output 形状为 (batch_size, seq_len, feature_dim)
+        # output 形状为 (batch_size, output_length, feature_dim)
         return output
+

@@ -153,6 +153,7 @@ def validate(model, valid_loader, device):
 
 
 def save_checkpoint(model, optimizer, epoch, best_valid_loss, checkpoint_path='checkpoint/checkpoint.pth'):
+    os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)  # 创建目录（如果不存在）
     torch.save({
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
