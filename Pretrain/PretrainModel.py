@@ -43,6 +43,47 @@ class GCN(nn.Module):
         return batch
 
 
+
+# class DenseGCN(nn.Module):
+#     def __init__(self, input_dim, hidden_dim, output_dim, dropout):
+#         super(DenseGCN, self).__init__()
+#         self.fc1 = nn.Linear(input_dim, hidden_dim)
+#         self.fc2 = nn.Linear(hidden_dim, output_dim)
+#         self.dropout = dropout
+#
+#     def forward(self, features, adj_matrix):
+#         # adj_matrix: (batch_size, num_nodes, num_nodes)
+#         # features: (batch_size, num_nodes, input_dim)
+#
+#         # Apply GCN layer 1
+#         x = self.fc1(torch.bmm(adj_matrix, features))
+#         x = F.relu(x)
+#         x = F.dropout(x, self.dropout, training=self.training)
+#
+#         # Apply GCN layer 2
+#         x = self.fc2(torch.bmm(adj_matrix, x))
+#         x = F.relu(x)
+#
+#         return x
+#
+#
+#
+# def normalize_adjacency(adj_matrix):
+#     # adj_matrix: (batch_size, num_nodes, num_nodes)
+#     # Add self-loops by adding an identity matrix to adj_matrix
+#     identity = torch.eye(adj_matrix.size(1), device=adj_matrix.device).unsqueeze(0)
+#     adj_matrix = adj_matrix + identity
+#
+#     # Compute the degree matrix (sum of each row)
+#     degree = torch.sum(adj_matrix, dim=2)
+#     degree_inv_sqrt = torch.pow(degree, -0.5)
+#     degree_inv_sqrt[torch.isinf(degree_inv_sqrt)] = 0.0  # Handle division by zero
+#
+#     # Normalize adjacency matrix: D^(-1/2) * A * D^(-1/2)
+#     normalized_adj_matrix = degree_inv_sqrt.unsqueeze(2) * adj_matrix * degree_inv_sqrt.unsqueeze(1)
+#     return normalized_adj_matrix
+
+
 # class NormalConv(nn.Module):
 #     def __init__(self, dg_hidden_size):
 #         super(NormalConv, self).__init__()
@@ -147,12 +188,14 @@ class PretrainModel(nn.Module):
         self.patch_embedding = PatchEmbedding(feature_dim, hidden_dim, patch_size).to(device)
         self.positional_encoding = PositionalEncoding(hidden_dim, seq_len).to(device)
         self.encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(hidden_dim, nhead=8, batch_first=True), num_layers=num_layers
+            nn.TransformerEncoderLayer(hidden_dim, nhead=8, dim_feedforward=2 * hidden_dim, batch_first=True), num_layers=num_layers
         ).to(device)
-        self.dynamic_graph = DynamicGraphLearner(hidden_dim, hidden_dim * 2, hidden_dim, seq_len // patch_size).to(device)
+        self.dynamic_graph = DynamicGraphLearner(hidden_dim, hidden_dim * 2, hidden_dim, seq_len // patch_size).to(
+            device)
         self.gcn = GCN(hidden_dim, hidden_dim * 2, hidden_dim, dropout, device).to(device)
+        # self.gcn = DenseGCN(hidden_dim, hidden_dim * 2, hidden_dim, dropout).to(device)
         self.decoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(hidden_dim, nhead=8, batch_first=True), num_layers=num_layers
+            nn.TransformerEncoderLayer(hidden_dim, nhead=8, dim_feedforward=2 * hidden_dim, batch_first=True), num_layers=num_layers
         ).to(device)
         self.output_layer = nn.Linear(hidden_dim, feature_dim).to(device)
 
@@ -167,25 +210,25 @@ class PretrainModel(nn.Module):
 
         encoder_output = self.encoder(
             x, src_key_padding_mask=Tmask.view(batch_size, -1) if Tmask is not None else None
-        )* mask.unsqueeze(-1)
+        ) * mask.unsqueeze(-1)
 
         edge_features, edge_weights = self.dynamic_graph(encoder_output, mask)
 
-        gcn_output = self.gcn(edge_features, edge_weights)* mask.unsqueeze(-1)
+        # # 对邻接矩阵进行归一化
+        # adj_matrix = normalize_adjacency(edge_weights)
+
+        gcn_output = self.gcn(edge_features, edge_weights) * mask.unsqueeze(-1)
         combined_output = encoder_output + gcn_output
 
         if is_pretraining:
             decoder_output = self.decoder(
                 combined_output, src_key_padding_mask=Tmask.view(batch_size, -1) if Tmask is not None else None
-            )* mask.unsqueeze(-1)
+            ) * mask.unsqueeze(-1)
             return self.output_layer(decoder_output.view(batch_size * seq_length, -1))
         else:
             return combined_output
 
-
-
-
-#调试维度用的一个小文件
+# 调试维度用的一个小文件
 # pretraining_data_path = 'E:\\climbing-aircraft-dataset\\dataTest\\pretraining_data.pt'  # 指定保存的文件名
 # pretraining_data_valid_path = 'E:\\climbing-aircraft-dataset\\dataTest\\pretraining_data_valid.pt'  # 指定保存的文件名
 
@@ -195,6 +238,6 @@ class PretrainModel(nn.Module):
 
 
 # 仅计算被抹除部分的损失
-    # l1 = nn.MSELoss()(outputs * Nfea_masks * valid_mask_expanded, sequences * Nfea_masks * valid_mask_expanded)
-    # 计算所有有效区域的损失
-    # l2 = nn.MSELoss()(outputs * valid_mask_expanded, sequences * valid_mask_expanded)
+# l1 = nn.MSELoss()(outputs * Nfea_masks * valid_mask_expanded, sequences * Nfea_masks * valid_mask_expanded)
+# 计算所有有效区域的损失
+# l2 = nn.MSELoss()(outputs * valid_mask_expanded, sequences * valid_mask_expanded)

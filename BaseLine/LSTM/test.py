@@ -1,5 +1,3 @@
-import io
-import sys
 import warnings
 
 import numpy as np
@@ -8,14 +6,15 @@ from torch import nn
 from tqdm import tqdm
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
+from BaseLine.LSTM.LSTM import LSTMBaseline
 from Downstream_tasks.DownstreamModel import DownstreamModel
 from Pretrain.PretrainModel import PretrainModel
 from Pretrain.train import feature_columns, seq_len, num_layers, dropout, patch_size, logger, hidden_dim
 from dataset.load_labels_data import load_processed_data
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 # 隐藏所有警告
 warnings.filterwarnings("ignore")
+
 
 def test_downstream(model, test_loader, device):
     model.eval()
@@ -35,7 +34,7 @@ def test_downstream(model, test_loader, device):
                 )
 
                 # 模型进行预测
-                outputs = model(features, mask=masks_input)
+                outputs = model(features, masks_input, masks_label)
 
                 # 计算损失，仅计算有效区域的损失
                 loss = nn.MSELoss()(outputs * masks_label.unsqueeze(-1), labels * masks_label.unsqueeze(-1))
@@ -80,6 +79,7 @@ def test_downstream(model, test_loader, device):
         #     'MAE': mae_i,
         #     'R^2': r2_i
         # }
+
         metrics[f'{feature_columns[i]}'] = {
             'RMSE': rmse_i,
             'MAE': mae_i,
@@ -87,7 +87,6 @@ def test_downstream(model, test_loader, device):
         }
 
     return running_loss / len(test_loader.dataset), rmse, mae, r2, metrics
-
 
 # 测试集路径和数据加载器
 downstream_data_test_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_test.pt'
@@ -97,32 +96,19 @@ test_loader = load_processed_data(downstream_data_test_path, batch_size)
 # 加载训练好的模型和设备设置
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-pretrain_model = PretrainModel(feature_dim=len(feature_columns), seq_len=seq_len, hidden_dim=hidden_dim,
-                               num_layers=num_layers, dropout=dropout, patch_size=patch_size, device=device)
-pretrain_checkpoint = torch.load('../Pretrain/best_pretrain_model/best_pretrain_model_A319.pth')
-logger.info("Loaded model: ../Pretrain/best_pretrain_model/best_pretrain_model.pth")
-pretrain_model.load_state_dict(pretrain_checkpoint)
+lstm_model = LSTMBaseline(len(feature_columns), hidden_dim, num_layers, dropout=dropout).to(device)
 
-downstream_model = DownstreamModel(
-    pretrain_model=pretrain_model,
-    feature_dim=len(feature_columns),
-    hidden_dim=hidden_dim,
-    num_layers=num_layers,
-    dropout=dropout
-).to(device)
-
-downstream_model.load_state_dict(torch.load('best_downstream_model/best_downstream_model_lstm.pth'))
-logger.info("Loaded model: best_downstream_model/best_downstream_model.pth")
-downstream_model.to(device)
+lstm_model.load_state_dict(torch.load('best_lstm_model/best_lstm_model.pth'))
+logger.info("Loaded model: best_lstm_model/best_lstm_model.pth")
+lstm_model.to(device)
 
 # 使用测试集进行评估
 
 
-test_loss, rmse, mae, r2, metrics = test_downstream(downstream_model, test_loader, device)
+test_loss, rmse, mae, r2, metrics = test_downstream(lstm_model, test_loader, device)
 
 logger.info(f"Test Loss: {test_loss:.6f}, RMSE: {rmse:.6f}, MAE: {mae:.6f}, R^2: {r2:.6f}")
 
 # 打印各个指标
 for feature, metric in metrics.items():
     logger.info(f"{feature}: RMSE: {metric['RMSE']:.6f}, MAE: {metric['MAE']:.6f}, R^2: {metric['R^2']:.6f}")
-

@@ -6,6 +6,8 @@ import torch
 from torch import nn
 import logging
 from tqdm import tqdm  # 引入 tqdm
+
+from BaseLine.LSTMPRE.LSTMModel import LSTMModel
 from Pretrain.PretrainModel import PretrainModel
 from dataset.load_processed_data import load_processed_data
 
@@ -117,7 +119,7 @@ def train_one_epoch(model, train_loader, optimizer, device):
                                                         max_drops=4)
 
             optimizer.zero_grad()
-            outputs = model(masked_sequences, mask=valid_mask, is_pretraining=True)
+            outputs = model(masked_sequences, valid_mask)
             loss = compute_loss(outputs, sequences, fea_masks, valid_mask.unsqueeze(-1).expand(-1, -1, sequences.size(-1)))
 
             loss.backward()
@@ -141,7 +143,7 @@ def validate(model, valid_loader, device):
                 masked_sequences, fea_masks = generate_mask(sequences, valid_mask, drop_prob=0.8, min_span=2,
                                                             max_span=10, max_drops=4)
 
-                outputs = model(masked_sequences, mask=valid_mask, is_pretraining=True)
+                outputs = model(masked_sequences, valid_mask)
                 loss = compute_loss(outputs, sequences, fea_masks,
                                     valid_mask.unsqueeze(-1).expand(-1, -1, sequences.size(-1)))
 
@@ -200,8 +202,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def train():
     # 创建模型
-    model = PretrainModel(feature_dim=len(feature_columns), seq_len=seq_len, hidden_dim=hidden_dim,
-                          num_layers=num_layers, dropout=dropout, patch_size=patch_size, device=device)
+    model = LSTMModel(len(feature_columns), hidden_dim, num_layers, dropout).to(device)
 
     # 将模型结构输出到日志
     logger.info(f"Model structure: {model}")

@@ -67,13 +67,13 @@ step_size = 5
 
 
 #调试维度用的一个小文件
-input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\normalized_diff_filtered_DH8D_train.csv'  # 替换为你的CSV文件路径
+input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\normalized_diff_filtered_A319_train.csv'  # 替换为你的CSV文件路径
 output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\pretraining_data_train.pt'  # 指定保存的文件名
 process_and_save(input_file_path, output_file_path, window_size, step_size)
-input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\normalized_diff_filtered_DH8D_valid.csv'  # 替换为你的CSV文件路径
+input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\normalized_diff_filtered_A319_valid.csv'  # 替换为你的CSV文件路径
 output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\pretraining_data_valid.pt'  # 指定保存的文件名
 process_and_save(input_file_path, output_file_path, window_size, step_size)
-input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\normalized_diff_filtered_DH8D_test.csv'  # 替换为你的CSV文件路径
+input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\normalized_diff_filtered_A319_test.csv'  # 替换为你的CSV文件路径
 output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\pretraining_data_test.pt'  # 指定保存的文件名
 process_and_save(input_file_path, output_file_path, window_size, step_size)
 

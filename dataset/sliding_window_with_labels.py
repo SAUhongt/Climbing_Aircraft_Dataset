@@ -31,7 +31,6 @@ def sliding_window_with_labels(data, window_size, input_size, label_size):
         return [(padded_input, padded_label, input_mask, label_mask)]
 
     # 否则，正常应用滑动窗口
-    num_windows = (len(data) - window_size) // 1 + 1  # 每次移动一个位置
     windows = [(data[i:i + input_size], data[i + input_size:i + window_size], np.ones(input_size, dtype=bool),
                 np.ones(label_size, dtype=bool))
                for i in range(0, len(data) - window_size + 1)]
@@ -49,6 +48,8 @@ def process_and_save(file_path, output_path, window_size=80, input_size=60, labe
     processed_masks_input = []
     processed_masks_label = []
 
+    sum = 0
+
     # 按segment分组并排序
     for segment_id, group in data.groupby('segment'):
         group = group.sort_values('timestep')
@@ -61,6 +62,13 @@ def process_and_save(file_path, output_path, window_size=80, input_size=60, labe
         windows = sliding_window_with_labels(group_features, window_size, input_size, label_size)
 
         for input_data, label_data, input_mask, label_mask in windows:
+            # 跳过输入或标签有效长度为 0 的窗口
+            if not input_mask.any() or not label_mask.any():
+                sum = sum + 1
+                print(f"无效数据+1={sum},ADSB_len = {len(group_features)},input_len = {input_mask.sum()},"
+                      f"label_len = {label_mask.sum()}")
+                continue
+
             processed_data.append(input_data)
             processed_labels.append(label_data)
             processed_masks_input.append(input_mask)
@@ -89,14 +97,18 @@ def process_and_save(file_path, output_path, window_size=80, input_size=60, labe
 
 
 # 示例使用
-# input_file_path = 'E:\\climbing-aircraft-dataset\\downstream_data\\normalized_test.csv'  # 替换为你的CSV文件路径
-# output_file_path = 'E:\\climbing-aircraft-dataset\\downstream_data\\normalized_test_with_labels.pt'  # 指定保存的文件名
-# input_file_path = 'E:\\climbing-aircraft-dataset\\downstream_data\\normalized_valid.csv'  # 替换为你的CSV文件路径
-# output_file_path = 'E:\\climbing-aircraft-dataset\\downstream_data\\normalized_valid_with_labels.pt'  # 指定保存的文件名
-input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_test.csv'  # 替换为你的CSV文件路径
-output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_test.pt'  # 指定保存的文件名
 window_size = 80
 input_size = 60
 label_size = 20
 
+input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_test.csv'  # 替换为你的CSV文件路径
+output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_test.pt'  # 指定保存的文件名
+process_and_save(input_file_path, output_file_path, window_size, input_size, label_size)
+
+input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_valid.csv'  # 替换为你的CSV文件路径
+output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_valid.pt'  # 指定保存的文件名
+process_and_save(input_file_path, output_file_path, window_size, input_size, label_size)
+
+input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_train.csv'  # 替换为你的CSV文件路径
+output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_train.pt'  # 指定保存的文件名
 process_and_save(input_file_path, output_file_path, window_size, input_size, label_size)

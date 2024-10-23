@@ -1,6 +1,7 @@
 import torch
 from tqdm import tqdm
 
+from BaseLine.LSTMPRE.LSTMModel import LSTMModel
 from Pretrain.PretrainModel import PretrainModel
 from Pretrain.train import generate_mask, compute_loss, feature_columns, seq_len, num_layers, dropout, patch_size, \
     logger, hidden_dim
@@ -28,7 +29,7 @@ def test(model, test_loader, device):
                 masked_sequences, fea_masks = generate_mask(sequences, valid_mask, drop_prob=0.8, min_span=2,
                                                             max_span=10, max_drops=4)
 
-                outputs = model(masked_sequences, mask=valid_mask, is_pretraining=True)
+                outputs = model(masked_sequences, valid_mask)
                 loss = compute_loss(outputs, sequences, fea_masks,
                                     valid_mask.unsqueeze(-1).expand(-1, -1, sequences.size(-1)))
 
@@ -46,8 +47,7 @@ test_loader = load_processed_data(pretraining_data_test_path, batch_size)
 
 # 加载训练好的模型和设备设置
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = PretrainModel(feature_dim=len(feature_columns), seq_len=seq_len, hidden_dim=hidden_dim,
-                      num_layers=num_layers, dropout=dropout, patch_size=patch_size, device=device)
+model = LSTMModel(len(feature_columns), hidden_dim, num_layers, dropout).to(device)
 model.load_state_dict(torch.load('best_pretrain_model/best_pretrain_model_A319.pth'))
 logger.info("loaded model: best_pretrain_model.pth")
 model.to(device)

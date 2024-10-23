@@ -6,9 +6,11 @@ from torch import nn
 import logging
 from tqdm import tqdm
 from datetime import datetime
+
+from BaseLine.LSTM.LSTM import LSTMBaseline
 from Downstream_tasks.DownstreamModel import DownstreamModel
 from Pretrain.PretrainModel import PretrainModel
-from Pretrain.train import feature_columns, seq_len, hidden_dim, patch_size, dropout, num_layers, logger
+from Pretrain.train import feature_columns, seq_len, hidden_dim, patch_size, dropout, num_layers, logger, target_len
 from dataset.load_labels_data import load_processed_data
 import warnings
 
@@ -59,7 +61,7 @@ def train_one_epoch(model, train_loader, optimizer, device):
             )
 
             optimizer.zero_grad()
-            outputs = model(features, mask=masks_input)
+            outputs = model(features, masks_input, masks_label)
             loss = compute_loss(outputs, labels, masks_label.unsqueeze(-1))
 
             loss.backward()
@@ -84,7 +86,7 @@ def validate(model, valid_loader, device):
                     masks_label.to(device)
                 )
 
-                outputs = model(features, mask=masks_input)
+                outputs = model(features, masks_input, masks_label)
                 loss = compute_loss(outputs, labels, masks_label.unsqueeze(-1))
 
                 running_loss += loss.item() * features.size(0)
@@ -122,24 +124,13 @@ def load_checkpoint(model, optimizer, checkpoint_path='checkpoint/downstream_che
 # 训练函数
 def train():
     # 加载预训练模型并构建下游任务模型
-    pretrain_model = PretrainModel(feature_dim=len(feature_columns), seq_len=seq_len, hidden_dim=hidden_dim,
-                                   num_layers=num_layers, dropout=dropout, patch_size=patch_size, device=device)
-    pretrain_checkpoint = torch.load('../Pretrain/best_pretrain_model/best_pretrain_model_A319.pth')
-    pretrain_model.load_state_dict(pretrain_checkpoint)
-
-    downstream_model = DownstreamModel(
-        pretrain_model=pretrain_model,
-        feature_dim=len(feature_columns),
-        hidden_dim=hidden_dim,
-        num_layers=num_layers,
-        dropout=dropout
-    ).to(device)
+    lstm_model = LSTMBaseline(len(feature_columns), hidden_dim, num_layers, dropout=dropout).to(device)
 
     # 将模型结构输出到日志
-    logger.info(f"Model structure: {downstream_model}")
+    logger.info(f"Model structure: {lstm_model}")
 
     # 定义损失函数和优化器
-    optimizer = torch.optim.Adam(downstream_model.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(lstm_model.parameters(), lr=1e-4)
 
     # 数据加载
     downstream_train_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_train.pt'
@@ -149,7 +140,7 @@ def train():
     valid_loader = load_processed_data(downstream_valid_path, batch_size)
 
     # 加载检查点
-    start_epoch, best_valid_loss = load_checkpoint(downstream_model, optimizer)
+    start_epoch, best_valid_loss = load_checkpoint(lstm_model, optimizer)
 
     # 训练模型
     num_epochs = 200
@@ -157,14 +148,14 @@ def train():
     early_stop_counter = 0
 
     for epoch in range(start_epoch, num_epochs):
-        train_loss = train_one_epoch(downstream_model, train_loader, optimizer, device)
-        valid_loss = validate(downstream_model, valid_loader, device)
+        train_loss = train_one_epoch(lstm_model, train_loader, optimizer, device)
+        valid_loss = validate(lstm_model, valid_loader, device)
 
         logger.info(f"Epoch {epoch + 1}/{num_epochs}, Train Loss: {train_loss:.6f}, Valid Loss: {valid_loss:.6f}")
 
         if valid_loss < best_valid_loss:
             best_valid_loss = valid_loss
-            torch.save(downstream_model.state_dict(), 'best_downstream_model/best_downstream_model_lstm.pth')
+            torch.save(lstm_model.state_dict(), 'best_lstm_model/best_lstm_model.pth')
             logger.info(f"Saved best model at epoch {epoch + 1}")
             early_stop_counter = 0
         else:
@@ -172,7 +163,7 @@ def train():
             logger.info(f"No improvement for {early_stop_counter} epochs.")
 
         # 保存最新检查点
-        save_checkpoint(downstream_model, optimizer, epoch, best_valid_loss)
+        save_checkpoint(lstm_model, optimizer, epoch, best_valid_loss)
 
         if early_stop_counter >= patience:
             logger.info(f"Early stopping at epoch {epoch + 1}")

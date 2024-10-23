@@ -1,12 +1,16 @@
 import torch
 from torch import nn
 
+from Pretrain.TCN.tcn import TemporalConvNet
+
 
 class DownstreamModel(nn.Module):
     def __init__(self, pretrain_model, feature_dim, hidden_dim, num_layers, dropout):
         super(DownstreamModel, self).__init__()
         self.pretrain_model = pretrain_model
         self.pretrain_model.requires_grad_(False)  # 冻结预训练模型的参数
+
+        self.tcn = TemporalConvNet(hidden_dim, [hidden_dim], kernel_size=3)
 
         # 使用 LSTM 作为预测头
         self.lstm = nn.LSTM(
@@ -26,15 +30,21 @@ class DownstreamModel(nn.Module):
 
         # combined_output 形状是 (batch_size, seq_len, hidden_dim)
         # 使用 LSTM 进行进一步的序列建模
-        lstm_output, _ = self.lstm(combined_output)
+        # lstm_output, _ = self.lstm(combined_output)
+
+        combined_output = combined_output.permute(0, 2, 1)
+
+        tcn_output = self.tcn(combined_output)
+
+        tcn_output = tcn_output.permute(0, 2, 1)
 
         # 根据 output_length 确定输出的长度
         if output_length is not None:
             # 使用切片选择输出的长度
-            output = self.output_layer(lstm_output[:, :output_length, :])
+            output = self.output_layer(tcn_output[:, :output_length, :])
         else:
             # 如果未指定输出长度，则使用整个输出
-            output = self.output_layer(lstm_output)
+            output = self.output_layer(tcn_output)
 
         # output 形状为 (batch_size, output_length, feature_dim)
         return output
