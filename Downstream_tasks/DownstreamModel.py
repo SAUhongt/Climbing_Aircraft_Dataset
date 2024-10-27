@@ -21,6 +21,12 @@ class DownstreamModel(nn.Module):
             dropout=dropout
         )
 
+        self.encoder = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(hidden_dim, nhead=8, dim_feedforward=2 * hidden_dim, batch_first=True),
+            num_layers=num_layers
+        )
+        self.linear = nn.Linear(hidden_dim, feature_dim)
+
         # 输出层，将 LSTM 的输出映射到原始特征维度
         self.output_layer = nn.Linear(hidden_dim, feature_dim)
 
@@ -32,19 +38,16 @@ class DownstreamModel(nn.Module):
         # 使用 LSTM 进行进一步的序列建模
         # lstm_output, _ = self.lstm(combined_output)
 
-        combined_output = combined_output.permute(0, 2, 1)
+        transformer_output = self.encoder(combined_output)
 
-        tcn_output = self.tcn(combined_output)
-
-        tcn_output = tcn_output.permute(0, 2, 1)
 
         # 根据 output_length 确定输出的长度
         if output_length is not None:
             # 使用切片选择输出的长度
-            output = self.output_layer(tcn_output[:, :output_length, :])
+            output = self.output_layer(transformer_output[:, :output_length, :])
         else:
             # 如果未指定输出长度，则使用整个输出
-            output = self.output_layer(tcn_output)
+            output = self.output_layer(transformer_output)
 
         # output 形状为 (batch_size, output_length, feature_dim)
         return output

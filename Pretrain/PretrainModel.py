@@ -10,15 +10,14 @@ from Pretrain.TCN.tcn import TemporalConvNet
 
 
 class GCN(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, dropout, device):
+    def __init__(self, input_dim, hidden_dim, output_dim, dropout):
         super().__init__()
         self.conv1 = GCNConv(input_dim, hidden_dim)
         self.conv2 = GCNConv(hidden_dim, output_dim)
         self.dropout = dropout
-        self.device = device
 
     def forward(self, edge_features, edge_weights):
-        batch = self.create_graph_batch(edge_features, edge_weights).to(self.device)
+        batch = self.create_graph_batch(edge_features, edge_weights)
         x = self.conv1(batch.x, batch.edge_index, batch.edge_attr)
         x = F.relu(x)
         x = F.dropout(x, self.dropout, training=self.training)
@@ -31,6 +30,8 @@ class GCN(nn.Module):
     def create_graph_batch(features: torch.Tensor, adj_matrices: torch.Tensor) -> Batch:
         data_list = []
         batch_size = features.size(0)
+        # 获取 features 的设备
+        device = features.device
 
         for i in range(batch_size):
             feature_matrix = features[i]
@@ -40,7 +41,7 @@ class GCN(nn.Module):
             data_list.append(data)
 
         batch = Batch.from_data_list(data_list)
-        return batch
+        return batch.to(device)
 
 
 
@@ -107,13 +108,13 @@ class DynamicGraphLearner(nn.Module):
         self.mlp_weight1 = nn.Sequential(
             nn.Linear(hidden_dim, 2 * hidden_dim),
             nn.ReLU(),
-            nn.Linear(2 * hidden_dim, seq_len ** 2),
+            nn.Linear(2 * hidden_dim, seq_len),
             nn.Tanh()
         )
         self.mlp_weight2 = nn.Sequential(
             nn.Linear(hidden_dim, 2 * hidden_dim),
             nn.ReLU(),
-            nn.Linear(2 * hidden_dim, seq_len ** 2),
+            nn.Linear(2 * hidden_dim, seq_len),
             nn.Tanh()
         )
         self.seq_len = seq_len
@@ -125,17 +126,16 @@ class DynamicGraphLearner(nn.Module):
         # Apply TCN
         tcn_output = self.tcn(inputs.transpose(1, 2)).transpose(1, 2)
         tcn_output = tcn_output * mask.unsqueeze(-1)
+        tcn_output = tcn_output.reshape(batch_size * num_nodes, -1)
 
-        # 添加全局平均池化
-        global_features = torch.mean(tcn_output, dim=1)  # 对序列长度维度进行平均池化
 
-        m1 = self.mlp_weight1(global_features).view(batch_size, self.seq_len, self.seq_len)
-        m2 = self.mlp_weight2(global_features).view(batch_size, self.seq_len, self.seq_len)
+        m1 = self.mlp_weight1(tcn_output).view(batch_size, self.seq_len, self.seq_len)
+        m2 = self.mlp_weight2(tcn_output).view(batch_size, self.seq_len, self.seq_len)
 
         a = torch.tanh(torch.matmul(m1, m2.transpose(2, 1)) - torch.matmul(m2, m1.transpose(2, 1)))
 
         # Extract edge features and weights
-        edge_features = self.mlp_features(tcn_output.reshape(batch_size * num_nodes, -1))
+        edge_features = self.mlp_features(tcn_output)
         edge_weights = torch.relu(a)
 
         # Reshape to appropriate sizes
@@ -187,15 +187,23 @@ class PretrainModel(nn.Module):
         self.device = device
         self.patch_embedding = PatchEmbedding(feature_dim, hidden_dim, patch_size).to(device)
         self.positional_encoding = PositionalEncoding(hidden_dim, seq_len).to(device)
+        # self.encoder = nn.TransformerEncoder(
+        #     nn.TransformerEncoderLayer(hidden_dim, nhead=8, dim_feedforward=2 * hidden_dim, batch_first=True), num_layers=num_layers
+        # ).to(device)
         self.encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(hidden_dim, nhead=8, dim_feedforward=2 * hidden_dim, batch_first=True), num_layers=num_layers
+            nn.TransformerEncoderLayer(hidden_dim, nhead=8, batch_first=True),
+            num_layers=num_layers
         ).to(device)
         self.dynamic_graph = DynamicGraphLearner(hidden_dim, hidden_dim * 2, hidden_dim, seq_len // patch_size).to(
             device)
-        self.gcn = GCN(hidden_dim, hidden_dim * 2, hidden_dim, dropout, device).to(device)
+        self.gcn = GCN(hidden_dim, hidden_dim * 2, hidden_dim, dropout).to(device)
         # self.gcn = DenseGCN(hidden_dim, hidden_dim * 2, hidden_dim, dropout).to(device)
+        # self.decoder = nn.TransformerEncoder(
+        #     nn.TransformerEncoderLayer(hidden_dim, nhead=8, dim_feedforward=2 * hidden_dim, batch_first=True), num_layers=num_layers
+        # ).to(device)
         self.decoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(hidden_dim, nhead=8, dim_feedforward=2 * hidden_dim, batch_first=True), num_layers=num_layers
+            nn.TransformerEncoderLayer(hidden_dim, nhead=8, batch_first=True),
+            num_layers=num_layers
         ).to(device)
         self.output_layer = nn.Linear(hidden_dim, feature_dim).to(device)
 

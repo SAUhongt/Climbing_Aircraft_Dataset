@@ -193,7 +193,7 @@ seq_len = 60
 target_len = 20
 hidden_dim = 64
 num_layers = 4
-dropout = 0.5
+dropout = 0.2
 patch_size = 1
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
