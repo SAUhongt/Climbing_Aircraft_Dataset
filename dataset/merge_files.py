@@ -31,6 +31,6 @@ def merge_files(input_folder, output_file):
 # # 合并训练集和验证集
 # merge_files(train_input_folder, train_output_file)
 # merge_files(valid_input_folder, valid_output_file)
-input_folder = 'E:\\climbing-aircraft-dataset\\dataTest\\test'
-output_file = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks.csv'
+input_folder = 'E:\\climbing-aircraft-dataset\\dataTest\\A319'
+output_file = 'E:\\climbing-aircraft-dataset\\dataTest\\A319_tasks.csv'
 merge_files(input_folder, output_file)

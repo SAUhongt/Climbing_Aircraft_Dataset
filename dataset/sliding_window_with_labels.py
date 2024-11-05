@@ -93,6 +93,7 @@ def process_and_save(file_path, output_path, window_size=80, input_size=60, labe
         'masks_input': masks_input_tensor,
         'masks_label': masks_label_tensor
     }, output_path)
+    print(features_array.shape)
     print(f'Saved processed data to {output_path}')
 
 
@@ -101,14 +102,18 @@ window_size = 80
 input_size = 60
 label_size = 20
 
-input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_test.csv'  # 替换为你的CSV文件路径
-output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_test.pt'  # 指定保存的文件名
-process_and_save(input_file_path, output_file_path, window_size, input_size, label_size)
+# input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_test.csv'  # 替换为你的CSV文件路径
+# output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_test.pt'  # 指定保存的文件名
+# process_and_save(input_file_path, output_file_path, window_size, input_size, label_size)
+#
+# input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_valid.csv'  # 替换为你的CSV文件路径
+# output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_valid.pt'  # 指定保存的文件名
+# process_and_save(input_file_path, output_file_path, window_size, input_size, label_size)
+#
+# input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_train.csv'  # 替换为你的CSV文件路径
+# output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_train.pt'  # 指定保存的文件名
+# process_and_save(input_file_path, output_file_path, window_size, input_size, label_size)
 
-input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_valid.csv'  # 替换为你的CSV文件路径
-output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_valid.pt'  # 指定保存的文件名
-process_and_save(input_file_path, output_file_path, window_size, input_size, label_size)
-
-input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_train.csv'  # 替换为你的CSV文件路径
-output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\Downstream_tasks_train.pt'  # 指定保存的文件名
+input_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\A319_tasks.csv'  # 替换为你的CSV文件路径
+output_file_path = 'E:\\climbing-aircraft-dataset\\dataTest\\A319_tasks.pt'  # 指定保存的文件名
 process_and_save(input_file_path, output_file_path, window_size, input_size, label_size)

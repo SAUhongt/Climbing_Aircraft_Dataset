@@ -28,20 +28,3 @@ class CustomTransformerEncoder(nn.Module):
         combined_output = encoder_output + gcn_output
 
         return combined_output
-
-# # 使用自定义的 Transformer 编码器
-# class MyModel(nn.Module):
-#     def __init__(self, hidden_dim, num_layers, nhead):
-#         super(MyModel, self).__init__()
-#         self.encoder = CustomTransformerEncoder(hidden_dim, num_layers, nhead)
-#
-#     def forward(self, x):
-#         layer_outputs = self.encoder(x)
-#         return layer_outputs
-#
-# # 示例用法
-# model = MyModel(hidden_dim=64, num_layers=4, nhead=8)
-# input_tensor = torch.randn(32, 60, 64)  # 示例输入(batch_size, seq_len, feature_dim)
-# outputs = model(input_tensor)
-#
-# # outputs 现在包含每一层的输出
